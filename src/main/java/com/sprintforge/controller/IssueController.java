@@ -1,19 +1,15 @@
 
 package com.sprintforge.controller;
 
-import com.sprintforge.dto.CreateIssueRequest;
+import com.sprintforge.dto.*;
 import com.sprintforge.entity.Issue;
 import com.sprintforge.service.IssueService;
 import jakarta.validation.Valid;
-
 import java.util.List;
-
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import com.sprintforge.dto.UpdateIssueStatusRequest;
-import com.sprintforge.dto.AssignIssueToSprintRequest;
-import org.springframework.web.bind.annotation.PatchMapping;
-import com.sprintforge.dto.UpdateIssueRequest;
+
 @RestController
 @RequestMapping("/api/issues")
 public class IssueController {
@@ -27,59 +23,61 @@ public class IssueController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public Issue createIssue(
-            @Valid @RequestBody CreateIssueRequest request) {
-        return issueService.createIssue(request);
+            @Valid @RequestBody CreateIssueRequest request,
+            @AuthenticationPrincipal String email) {
+        return issueService.createIssue(request, email);
     }
 
     @GetMapping("/{id}")
-    public Issue getIssueById(@PathVariable Long id) {
-        return issueService.getIssueById(id);
+    public Issue getIssueById(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String email) {
+        return issueService.getIssueById(id, email);
     }
 
-    @GetMapping
-    public java.util.List<Issue> getIssuesByProjectId(
-            @RequestParam Long projectId) {
-        return issueService.getIssuesByProjectId(projectId);
+    @GetMapping(params = "projectId")
+    public List<Issue> getIssuesByProjectId(
+            @RequestParam Long projectId,
+            @AuthenticationPrincipal String email) {
+        return issueService.getIssuesByProjectId(projectId, email);
     }
 
     @PatchMapping("/{id}/status")
-public Issue updateIssueStatus(
-        @PathVariable Long id,
-        @Valid @RequestBody UpdateIssueStatusRequest request) {
+    public Issue updateIssueStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateIssueStatusRequest request,
+            @AuthenticationPrincipal String email) {
+        return issueService.updateIssueStatus(id, request.getStatus(), email);
+    }
 
-    return issueService.updateIssueStatus(id, request.getStatus());
+    @PatchMapping("/{id}/sprint")
+    public Issue assignIssueToSprint(
+            @PathVariable Long id,
+            @Valid @RequestBody AssignIssueToSprintRequest request,
+            @AuthenticationPrincipal String email) {
+        return issueService.assignIssueToSprint(id, request.getSprintId(), email);
+    }
 
-    
-}
-@PatchMapping("/{id}/sprint")
-public Issue assignIssueToSprint(
-        @PathVariable Long id,
-        @Valid @RequestBody AssignIssueToSprintRequest request) {
+    @GetMapping(params = "sprintId")
+    public List<Issue> getIssuesBySprintId(
+            @RequestParam Long sprintId,
+            @AuthenticationPrincipal String email) {
+        return issueService.getIssuesBySprintId(sprintId, email);
+    }
 
-    return issueService.assignIssueToSprint(
-            id,
-            request.getSprintId()
-    );
-}
+    @PatchMapping("/{id}")
+    public Issue updateIssue(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateIssueRequest request,
+            @AuthenticationPrincipal String email) {
+        return issueService.updateIssue(id, request, email);
+    }
 
-@GetMapping(params = "sprintId")
-public List<Issue> getIssuesBySprintId(
-        @RequestParam Long sprintId) {
-
-    return issueService.getIssuesBySprintId(sprintId);
-}
-
-@PatchMapping("/{id}")
-public Issue updateIssue(
-        @PathVariable Long id,
-        @Valid @RequestBody UpdateIssueRequest request) {
-
-    return issueService.updateIssue(id, request);
-}
-
-@DeleteMapping("/{id}")
-@ResponseStatus(HttpStatus.NO_CONTENT)
-public void deleteIssue(@PathVariable Long id) {
-    issueService.deleteIssue(id);
-}
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteIssue(
+            @PathVariable Long id,
+            @AuthenticationPrincipal String email) {
+        issueService.deleteIssue(id, email);
+    }
 }

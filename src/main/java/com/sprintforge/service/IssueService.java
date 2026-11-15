@@ -11,9 +11,18 @@ import com.sprintforge.repository.SprintRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import com.sprintforge.repository.IssueSpecification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 import java.util.Set;
+
+import com.sprintforge.repository.IssueSpecification;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 @Service
 public class IssueService {
@@ -90,10 +99,62 @@ public class IssueService {
         return getAuthorizedIssue(id, email);
     }
 
-    public List<Issue> getIssuesByProjectId(Long projectId, String email) {
-        verifyProjectOwnership(projectId, email);
-        return issueRepository.findByProjectId(projectId);
+    
+public Page<Issue> getIssuesByProjectId(
+        Long projectId,
+        String email,
+        String status,
+        String priority,
+        Long sprintId,
+        String title,
+        Pageable pageable) {
+
+    // 1. Security: verify project ownership first
+    verifyProjectOwnership(projectId, email);
+
+    // 2. Mandatory filter: only issues of this project
+    Specification<Issue> spec =
+            IssueSpecification.hasProjectId(projectId);
+
+    // 3. Optional filter: status
+    if (status != null && !status.isBlank()) {
+        if (!VALID_STATUSES.contains(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid issue status");
+        }
+
+        spec = spec.and(
+                IssueSpecification.hasStatus(status));
     }
+
+    // 4. Optional filter: priority
+    if (priority != null && !priority.isBlank()) {
+        if (!VALID_PRIORITIES.contains(priority)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid issue priority");
+        }
+
+        spec = spec.and(
+                IssueSpecification.hasPriority(priority));
+    }
+
+    // 5. Optional filter: sprint
+    if (sprintId != null) {
+        spec = spec.and(
+                IssueSpecification.hasSprintId(sprintId));
+    }
+
+    // 6. Optional filter: title search
+    if (title != null && !title.isBlank()) {
+        spec = spec.and(
+                IssueSpecification.titleContains(title.trim()));
+    }
+
+    // 7. Execute filtered + paginated query
+    return issueRepository.findAll(spec, pageable);
+}
 
     public Issue updateIssueStatus(Long id, String status, String email) {
         if (status == null || !VALID_STATUSES.contains(status)) {

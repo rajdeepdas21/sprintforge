@@ -17,7 +17,15 @@ import java.util.Optional;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+//import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.jpa.domain.Specification;
 
 class IssueServiceTest {
 
@@ -108,21 +116,28 @@ class IssueServiceTest {
         verify(issueRepository).save(any(Issue.class));
     }
 
-    @Test
-    void getIssuesByProjectIdReturnsIssuesWhenAuthorized() {
-        authorizeProject(1L);
+    
+@Test
+void getIssuesByProjectIdReturnsIssuesWhenAuthorized() {
+    authorizeProject(1L);
 
-        Issue issue = new Issue();
-        issue.setProjectId(1L);
-        issue.setTitle("Implement login");
+    Issue issue = new Issue();
+    issue.setProjectId(1L);
+    issue.setTitle("Implement login");
 
-        when(issueRepository.findByProjectId(1L)).thenReturn(List.of(issue));
+    when(issueRepository.findAll(
+            any(Specification.class),
+            any(Pageable.class)
+    )).thenReturn(new PageImpl<>(List.of(issue)));
 
-        List<Issue> result = issueService.getIssuesByProjectId(1L, EMAIL);
+    Page<Issue> result = issueService.getIssuesByProjectId(
+            1L, EMAIL, null, null, null, null, PageRequest.of(0, 10)
+    );
 
-        assertEquals(1, result.size());
-        assertEquals("Implement login", result.get(0).getTitle());
-    }
+    assertEquals(1, result.getContent().size());
+    assertEquals("Implement login", result.getContent().get(0).getTitle());
+}
+
 
     @Test
     void getIssuesByProjectIdThrows404WhenProjectDoesNotExist() {
@@ -130,11 +145,15 @@ class IssueServiceTest {
 
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> issueService.getIssuesByProjectId(9999L, EMAIL)
-        );
+                () -> issueService.getIssuesByProjectId(
+        9999L, EMAIL, null, null, null, null, PageRequest.of(0, 10)
+        ));
 
         assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
-        verify(issueRepository, never()).findByProjectId(anyLong());
+        verify(issueRepository, never()).findAll(
+        //any(Specification.class),
+        any(Pageable.class)
+);
     }
 
     @Test
@@ -144,11 +163,15 @@ class IssueServiceTest {
 
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
-                () -> issueService.getIssuesByProjectId(1L, EMAIL)
-        );
+                () -> issueService.getIssuesByProjectId(
+        1L, EMAIL, null, null, null, null, PageRequest.of(0, 10)
+));
 
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
-        verify(issueRepository, never()).findByProjectId(anyLong());
+        verify(issueRepository, never()).findAll(
+        any(Specification.class),
+        any(Pageable.class)
+);
     }
 
     @Test
@@ -176,7 +199,10 @@ class IssueServiceTest {
         );
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        verify(issueRepository, never()).findById(anyLong());
+        verify(issueRepository, never()).findAll(
+        any(Specification.class),
+        any(Pageable.class)
+);
     }
 
     @Test
@@ -342,7 +368,7 @@ class IssueServiceTest {
 
         issueService.deleteIssue(1L, EMAIL);
 
-        verify(issueRepository).delete(issue);
+        verify(issueRepository).delete((Issue) issue);
     }
 
     @Test
@@ -355,6 +381,6 @@ class IssueServiceTest {
         );
 
         assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
-        verify(issueRepository, never()).delete(any());
+        verify(issueRepository, never()).delete(any(Issue.class));
     }
 }

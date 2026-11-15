@@ -8,6 +8,8 @@ import com.sprintforge.service.IssueService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,10 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import org.springframework.data.domain.Page;
+//import org.springframework.data.domain.PageImpl;
+//import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 @WebMvcTest(IssueController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class IssueControllerTest {
@@ -78,29 +84,54 @@ class IssueControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    @Test
-    void getIssuesByProjectIdReturns200AndIssueList() throws Exception {
-        Issue issue = new Issue();
-        issue.setProjectId(1L);
-        issue.setTitle("Implement login");
-        issue.setPriority("HIGH");
+    
+@Test
+void getIssuesByProjectIdReturns200AndIssuePage() throws Exception {
+    Issue issue = new Issue();
+    issue.setProjectId(1L);
+    issue.setTitle("Implement login");
+    issue.setPriority("HIGH");
 
-        when(issueService.getIssuesByProjectId(eq(1L), any()))
-                .thenReturn(List.of(issue));
+    Page<Issue> issuePage = new PageImpl<>(
+            List.of(issue),
+            PageRequest.of(0, 10),
+            1
+    );
 
-        mockMvc.perform(get("/api/issues?projectId=1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].title").value("Implement login"));
-    }
+    when(issueService.getIssuesByProjectId(
+            eq(1L),
+            any(),
+            isNull(),
+            isNull(),
+            isNull(),
+            isNull(),
+            any(Pageable.class)
+    )).thenReturn(issuePage);
+
+    mockMvc.perform(get("/api/issues?projectId=1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content.length()").value(1))
+            .andExpect(jsonPath("$.content[0].title")
+                    .value("Implement login"))
+            .andExpect(jsonPath("$.totalElements").value(1));
+}
+
 
     @Test
     void getIssuesByProjectIdReturns404WhenProjectDoesNotExist()
             throws Exception {
-        when(issueService.getIssuesByProjectId(eq(9999L), any()))
-                .thenThrow(new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Project not found"));
-
+        when(issueService.getIssuesByProjectId(
+        eq(9999L),
+        any(),
+        isNull(),
+        isNull(),
+        isNull(),
+        isNull(),
+        any(Pageable.class)
+)).thenThrow(new ResponseStatusException(
+        HttpStatus.NOT_FOUND,
+        "Project not found"
+));
         mockMvc.perform(get("/api/issues?projectId=9999"))
                 .andExpect(status().isNotFound());
     }

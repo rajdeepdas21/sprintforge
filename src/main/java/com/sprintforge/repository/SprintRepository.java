@@ -9,4 +9,7 @@ import java.util.List;
 public interface SprintRepository extends JpaRepository<Sprint, Long> {
 
     List<Sprint> findByProjectId(Long projectId);
+
+    // Used to prevent deleting a project that still contains sprints.
+boolean existsByProjectId(Long projectId);
 }

@@ -1,4 +1,3 @@
-
 package com.sprintforge.service;
 
 import com.sprintforge.dto.CreateIssueRequest;
@@ -6,31 +5,22 @@ import com.sprintforge.dto.UpdateIssueRequest;
 import com.sprintforge.entity.Issue;
 import com.sprintforge.entity.Sprint;
 import com.sprintforge.repository.IssueRepository;
+import com.sprintforge.repository.IssueSpecification;
 import com.sprintforge.repository.ProjectRepository;
 import com.sprintforge.repository.SprintRepository;
+import com.sprintforge.repository.WorkspaceMemberRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import com.sprintforge.repository.IssueSpecification;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
-
+import com.sprintforge.dto.AssignIssueToUserRequest;
 import java.util.List;
 import java.util.Set;
 
-import com.sprintforge.repository.IssueSpecification;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
-
 @Service
 public class IssueService {
-
-    private final IssueRepository issueRepository;
-    private final ProjectRepository projectRepository;
-    private final SprintRepository sprintRepository;
-    private final UserService userService;
 
     private static final Set<String> VALID_PRIORITIES =
             Set.of("LOW", "MEDIUM", "HIGH", "URGENT");
@@ -38,18 +28,26 @@ public class IssueService {
     private static final Set<String> VALID_STATUSES =
             Set.of("TODO", "IN_PROGRESS", "IN_REVIEW", "DONE");
 
+    private final IssueRepository issueRepository;
+    private final ProjectRepository projectRepository;
+    private final SprintRepository sprintRepository;
+    private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final UserService userService;
+
     public IssueService(
             IssueRepository issueRepository,
             ProjectRepository projectRepository,
             SprintRepository sprintRepository,
+            WorkspaceMemberRepository workspaceMemberRepository,
             UserService userService) {
         this.issueRepository = issueRepository;
         this.projectRepository = projectRepository;
         this.sprintRepository = sprintRepository;
+        this.workspaceMemberRepository = workspaceMemberRepository;
         this.userService = userService;
     }
 
-    private void verifyProjectOwnership(Long projectId, String email) {
+    private void verifyProjectAccess(Long projectId, String email) {
         Long userId = userService.getUserIdByEmail(email);
 
         if (!projectRepository.existsById(projectId)) {
@@ -57,9 +55,30 @@ public class IssueService {
                     HttpStatus.NOT_FOUND, "Project not found");
         }
 
-        if (!projectRepository.isOwnedByUser(projectId, userId)) {
+        if (!projectRepository.isAccessibleByUser(projectId, userId)) {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN, "Access denied");
+        }
+    }
+
+    private void verifyIssueWriteAccess(Long projectId, String email) {
+        Long userId = userService.getUserIdByEmail(email);
+
+        Long workspaceId = projectRepository
+                .findWorkspaceIdByProjectId(projectId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Project not found"));
+
+        String role = workspaceMemberRepository
+                .findRole(workspaceId, userId)
+                .orElse(null);
+
+        if (!"OWNER".equals(role)
+                && !"ADMIN".equals(role)
+                && !"MEMBER".equals(role)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "You do not have permission to change issues");
         }
     }
 
@@ -68,7 +87,16 @@ public class IssueService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Issue not found"));
 
-        verifyProjectOwnership(issue.getProjectId(), email);
+        verifyProjectAccess(issue.getProjectId(), email);
+        return issue;
+    }
+
+    private Issue getWritableIssue(Long issueId, String email) {
+        Issue issue = issueRepository.findById(issueId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Issue not found"));
+
+        verifyIssueWriteAccess(issue.getProjectId(), email);
         return issue;
     }
 
@@ -81,7 +109,7 @@ public class IssueService {
                     "Priority must be LOW, MEDIUM, HIGH, or URGENT");
         }
 
-        verifyProjectOwnership(request.getProjectId(), email);
+        verifyIssueWriteAccess(request.getProjectId(), email);
 
         Issue issue = new Issue();
         issue.setProjectId(request.getProjectId());
@@ -99,62 +127,47 @@ public class IssueService {
         return getAuthorizedIssue(id, email);
     }
 
-    
-public Page<Issue> getIssuesByProjectId(
-        Long projectId,
-        String email,
-        String status,
-        String priority,
-        Long sprintId,
-        String title,
-        Pageable pageable) {
+    public Page<Issue> getIssuesByProjectId(
+            Long projectId,
+            String email,
+            String status,
+            String priority,
+            Long sprintId,
+            String title,
+            Pageable pageable) {
 
-    // 1. Security: verify project ownership first
-    verifyProjectOwnership(projectId, email);
+        verifyProjectAccess(projectId, email);
 
-    // 2. Mandatory filter: only issues of this project
-    Specification<Issue> spec =
-            IssueSpecification.hasProjectId(projectId);
+        Specification<Issue> spec =
+                IssueSpecification.hasProjectId(projectId);
 
-    // 3. Optional filter: status
-    if (status != null && !status.isBlank()) {
-        if (!VALID_STATUSES.contains(status)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Invalid issue status");
+        if (status != null && !status.isBlank()) {
+            if (!VALID_STATUSES.contains(status)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Invalid issue status");
+            }
+            spec = spec.and(IssueSpecification.hasStatus(status));
         }
 
-        spec = spec.and(
-                IssueSpecification.hasStatus(status));
-    }
-
-    // 4. Optional filter: priority
-    if (priority != null && !priority.isBlank()) {
-        if (!VALID_PRIORITIES.contains(priority)) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "Invalid issue priority");
+        if (priority != null && !priority.isBlank()) {
+            if (!VALID_PRIORITIES.contains(priority)) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Invalid issue priority");
+            }
+            spec = spec.and(IssueSpecification.hasPriority(priority));
         }
 
-        spec = spec.and(
-                IssueSpecification.hasPriority(priority));
-    }
+        if (sprintId != null) {
+            spec = spec.and(IssueSpecification.hasSprintId(sprintId));
+        }
 
-    // 5. Optional filter: sprint
-    if (sprintId != null) {
-        spec = spec.and(
-                IssueSpecification.hasSprintId(sprintId));
-    }
+        if (title != null && !title.isBlank()) {
+            spec = spec.and(
+                    IssueSpecification.titleContains(title.trim()));
+        }
 
-    // 6. Optional filter: title search
-    if (title != null && !title.isBlank()) {
-        spec = spec.and(
-                IssueSpecification.titleContains(title.trim()));
+        return issueRepository.findAll(spec, pageable);
     }
-
-    // 7. Execute filtered + paginated query
-    return issueRepository.findAll(spec, pageable);
-}
 
     public Issue updateIssueStatus(Long id, String status, String email) {
         if (status == null || !VALID_STATUSES.contains(status)) {
@@ -163,21 +176,20 @@ public Page<Issue> getIssuesByProjectId(
                     "Status must be TODO, IN_PROGRESS, IN_REVIEW, or DONE");
         }
 
-        Issue issue = getAuthorizedIssue(id, email);
+        Issue issue = getWritableIssue(id, email);
         issue.setStatus(status);
         return issueRepository.save(issue);
     }
 
     public Issue assignIssueToSprint(
             Long issueId, Long sprintId, String email) {
-
-        Issue issue = getAuthorizedIssue(issueId, email);
+        Issue issue = getWritableIssue(issueId, email);
 
         Sprint sprint = sprintRepository.findById(sprintId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Sprint not found"));
 
-        verifyProjectOwnership(sprint.getProjectId(), email);
+        verifyProjectAccess(sprint.getProjectId(), email);
 
         if (!issue.getProjectId().equals(sprint.getProjectId())) {
             throw new ResponseStatusException(
@@ -194,14 +206,13 @@ public Page<Issue> getIssuesByProjectId(
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Sprint not found"));
 
-        verifyProjectOwnership(sprint.getProjectId(), email);
+        verifyProjectAccess(sprint.getProjectId(), email);
         return issueRepository.findBySprintId(sprintId);
     }
 
     public Issue updateIssue(
             Long issueId, UpdateIssueRequest request, String email) {
-
-        Issue issue = getAuthorizedIssue(issueId, email);
+        Issue issue = getWritableIssue(issueId, email);
 
         String priority = request.getPriority();
 
@@ -225,7 +236,52 @@ public Page<Issue> getIssuesByProjectId(
     }
 
     public void deleteIssue(Long issueId, String email) {
-        Issue issue = getAuthorizedIssue(issueId, email);
+        Issue issue = getWritableIssue(issueId, email);
         issueRepository.delete(issue);
     }
+
+   public Issue assignIssueToUser(
+        Long issueId,
+        AssignIssueToUserRequest request,
+        String requesterEmail) {
+
+    // Allows OWNER, ADMIN, or MEMBER; rejects VIEWER.
+    Issue issue = getWritableIssue(issueId, requesterEmail);
+
+    Long requesterId = userService.getUserIdByEmail(requesterEmail);
+
+    Long workspaceId = projectRepository
+            .findWorkspaceIdByProjectId(issue.getProjectId())
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Project not found"));
+
+    Long assigneeId = userService
+            .getUserByEmail(request.email())
+            .getId();
+
+    if (!workspaceMemberRepository.existsByWorkspaceIdAndUserId(
+            workspaceId, assigneeId)) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Assignee must be a member of this workspace");
+    }
+
+    if (requesterId.equals(assigneeId)) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Self-assignment is not allowed");
+    }
+
+    issue.setAssigneeId(assigneeId);
+    return issueRepository.save(issue);
+}
+
+public Issue unassignIssue(
+        Long issueId,
+        String requesterEmail) {
+
+    Issue issue = getWritableIssue(issueId, requesterEmail);
+    issue.setAssigneeId(null);
+    return issueRepository.save(issue);
+}
 }

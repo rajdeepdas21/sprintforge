@@ -13,4 +13,8 @@ public interface IssueRepository extends JpaRepository<Issue, Long>,
     List<Issue> findByProjectId(Long projectId);
 
     List<Issue> findBySprintId(Long sprintId);
+
+    // Used to prevent deleting a project or sprint that still has issues.
+boolean existsByProjectId(Long projectId);
+boolean existsBySprintId(Long sprintId);
 }

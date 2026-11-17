@@ -29,6 +29,9 @@ public class Issue {
     @Column(name = "sprint_id")
 private Long sprintId;
 
+@Column(name = "assignee_id")
+private Long assigneeId;
+
     public Issue() {
     }
 
@@ -82,5 +85,13 @@ private Long sprintId;
 
 public void setSprintId(Long sprintId) {
     this.sprintId = sprintId;
+}
+
+public Long getAssigneeId() {
+    return assigneeId;
+}
+
+public void setAssigneeId(Long assigneeId) {
+    this.assigneeId = assigneeId;
 }
 }

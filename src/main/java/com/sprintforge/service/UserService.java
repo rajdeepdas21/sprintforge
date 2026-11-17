@@ -22,4 +22,10 @@ public class UserService {
 
         return user.getId();
     }
+    public User getUserByEmail(String email) {
+    return userRepository.findByEmailIgnoreCase(email)
+            .orElseThrow(() ->
+                    new UsernameNotFoundException("User not found"));
+}
+
 }

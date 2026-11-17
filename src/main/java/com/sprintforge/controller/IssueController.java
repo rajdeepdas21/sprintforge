@@ -14,7 +14,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.web.server.ResponseStatusException;
 import java.util.Set;
 @RestController
 @RequestMapping("/api/issues")
@@ -137,4 +136,19 @@ public Page<Issue> getIssuesByProjectId(
             @AuthenticationPrincipal String email) {
         issueService.deleteIssue(id, email);
     }
+
+    @PatchMapping("/{id}/assignee")
+public Issue assignIssueToUser(
+        @PathVariable Long id,
+        @Valid @RequestBody AssignIssueToUserRequest request,
+        @AuthenticationPrincipal String email) {
+    return issueService.assignIssueToUser(id, request, email);
+}
+
+@DeleteMapping("/{id}/assignee")
+public Issue unassignIssue(
+        @PathVariable Long id,
+        @AuthenticationPrincipal String email) {
+    return issueService.unassignIssue(id, email);
+}
 }

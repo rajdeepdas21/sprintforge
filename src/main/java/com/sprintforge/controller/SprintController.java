@@ -1,21 +1,15 @@
 
 package com.sprintforge.controller;
-
 import com.sprintforge.dto.CreateSprintRequest;
 import com.sprintforge.entity.Sprint;
 import com.sprintforge.service.SprintService;
-
 import jakarta.validation.Valid;
-
 import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
-
 import com.sprintforge.dto.UpdateSprintStatusRequest;
-
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-
+import com.sprintforge.dto.UpdateSprintRequest;
 @RestController
 @RequestMapping("/api/sprints")
 public class SprintController {
@@ -58,5 +52,22 @@ public Sprint updateSprintStatus(
             request.getStatus(),
             email
     );
+}
+// Replace a sprint's name and dates.
+@PutMapping("/{id}")
+public Sprint updateSprint(
+        @PathVariable Long id,
+        @Valid @RequestBody UpdateSprintRequest request,
+        @AuthenticationPrincipal String email) {
+    return sprintService.updateSprint(id, request, email);
+}
+
+// Delete only when no issue references this sprint.
+@DeleteMapping("/{id}")
+@ResponseStatus(HttpStatus.NO_CONTENT)
+public void deleteSprint(
+        @PathVariable Long id,
+        @AuthenticationPrincipal String email) {
+    sprintService.deleteSprint(id, email);
 }
 }

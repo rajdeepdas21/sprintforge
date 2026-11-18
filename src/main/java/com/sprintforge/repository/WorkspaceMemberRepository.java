@@ -38,4 +38,8 @@ public interface WorkspaceMemberRepository
 Optional<String> findRole(
         @Param("workspaceId") Long workspaceId,
         @Param("userId") Long userId);
+
+
+        // Removes member rows before their workspace is deleted.
+void deleteByWorkspaceId(Long workspaceId);
 }

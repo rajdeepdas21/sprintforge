@@ -15,6 +15,7 @@ import org.springframework.security.core.Authentication;
 import java.util.List;
 import com.sprintforge.dto.UpdateWorkspaceMemberRoleRequest;
 import com.sprintforge.entity.WorkspaceMember;
+import com.sprintforge.dto.UpdateWorkspaceRequest;
 @RestController
 @RequestMapping("/api/workspaces")
 public class WorkspaceController {
@@ -99,5 +100,23 @@ public void removeWorkspaceMember(
             workspaceId,
             userId,
             authentication.getName());
+}
+// Rename a workspace; the service checks that the requester is its owner.
+@PutMapping("/{id}")
+public Workspace updateWorkspace(
+        @PathVariable Long id,
+        @Valid @RequestBody UpdateWorkspaceRequest request,
+        Authentication authentication) {
+    return workspaceService.updateWorkspace(
+            id, request, authentication.getName());
+}
+
+// Delete an empty workspace; returns HTTP 204 when successful.
+@DeleteMapping("/{id}")
+@ResponseStatus(HttpStatus.NO_CONTENT)
+public void deleteWorkspace(
+        @PathVariable Long id,
+        Authentication authentication) {
+    workspaceService.deleteWorkspace(id, authentication.getName());
 }
 }

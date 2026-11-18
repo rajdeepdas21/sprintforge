@@ -13,8 +13,11 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-
+import com.sprintforge.dto.UpdateWorkspaceRequest;
+import com.sprintforge.entity.Workspace;
+import com.sprintforge.repository.ProjectRepository;
 class WorkspaceServiceTest {
 
     private static final Long WORKSPACE_ID = 1L;
@@ -23,22 +26,26 @@ class WorkspaceServiceTest {
     private static final Long MEMBER_ID = 30L;
     private static final String OWNER_EMAIL = "owner@example.com";
     private static final String ADMIN_EMAIL = "admin@example.com";
+    
 
     private WorkspaceRepository workspaceRepository;
     private WorkspaceMemberRepository workspaceMemberRepository;
     private UserService userService;
     private WorkspaceService workspaceService;
+    private ProjectRepository projectRepository;
 
     @BeforeEach
     void setUp() {
         workspaceRepository = mock(WorkspaceRepository.class);
         workspaceMemberRepository = mock(WorkspaceMemberRepository.class);
         userService = mock(UserService.class);
+        projectRepository = mock(ProjectRepository.class);
 
-        workspaceService = new WorkspaceService(
-                workspaceRepository,
-                userService,
-                workspaceMemberRepository);
+workspaceService = new WorkspaceService(
+        workspaceRepository,
+        userService,
+        workspaceMemberRepository,
+        projectRepository);
 
         when(workspaceRepository.existsById(WORKSPACE_ID))
                 .thenReturn(true);
@@ -163,4 +170,82 @@ class WorkspaceServiceTest {
         assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
         verify(workspaceMemberRepository, never()).delete(any());
     }
+
+    @Test
+void ownerCanRenameWorkspace() {
+    Workspace workspace = new Workspace();
+    workspace.setName("Old name");
+    workspace.setOwnerId(OWNER_ID);
+
+    when(workspaceRepository.findById(WORKSPACE_ID))
+            .thenReturn(Optional.of(workspace));
+    when(workspaceRepository.save(workspace)).thenReturn(workspace);
+
+    UpdateWorkspaceRequest request = new UpdateWorkspaceRequest();
+    request.setName("New name");
+
+    Workspace result = workspaceService.updateWorkspace(
+            WORKSPACE_ID, request, OWNER_EMAIL);
+
+    assertEquals("New name", result.getName());
+    verify(workspaceRepository).save(workspace);
+}
+
+@Test
+void adminCannotRenameWorkspace() {
+    Workspace workspace = new Workspace();
+    workspace.setName("Workspace");
+    workspace.setOwnerId(OWNER_ID);
+
+    when(workspaceRepository.findById(WORKSPACE_ID))
+            .thenReturn(Optional.of(workspace));
+
+    UpdateWorkspaceRequest request = new UpdateWorkspaceRequest();
+    request.setName("New name");
+
+    ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> workspaceService.updateWorkspace(
+                    WORKSPACE_ID, request, ADMIN_EMAIL));
+
+    assertEquals(HttpStatus.FORBIDDEN, exception.getStatusCode());
+    verify(workspaceRepository, never()).save(any());
+}
+
+@Test
+void deleteWorkspaceReturns409WhenProjectsRemain() {
+    Workspace workspace = new Workspace();
+    workspace.setOwnerId(OWNER_ID);
+
+    when(workspaceRepository.findById(WORKSPACE_ID))
+            .thenReturn(Optional.of(workspace));
+    when(projectRepository.existsByWorkspaceId(WORKSPACE_ID))
+            .thenReturn(true);
+
+    ResponseStatusException exception = assertThrows(
+            ResponseStatusException.class,
+            () -> workspaceService.deleteWorkspace(
+                    WORKSPACE_ID, OWNER_EMAIL));
+
+    assertEquals(HttpStatus.CONFLICT, exception.getStatusCode());
+    verify(workspaceMemberRepository, never())
+            .deleteByWorkspaceId(WORKSPACE_ID);
+    verify(workspaceRepository, never()).delete(any(Workspace.class));
+}
+
+@Test
+void ownerCanDeleteWorkspaceWithoutProjects() {
+    Workspace workspace = new Workspace();
+    workspace.setOwnerId(OWNER_ID);
+
+    when(workspaceRepository.findById(WORKSPACE_ID))
+            .thenReturn(Optional.of(workspace));
+    when(projectRepository.existsByWorkspaceId(WORKSPACE_ID))
+            .thenReturn(false);
+
+    workspaceService.deleteWorkspace(WORKSPACE_ID, OWNER_EMAIL);
+
+    verify(workspaceMemberRepository).deleteByWorkspaceId(WORKSPACE_ID);
+    verify(workspaceRepository).delete(workspace);
+}
 }

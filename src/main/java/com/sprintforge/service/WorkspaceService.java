@@ -13,7 +13,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import com.sprintforge.dto.UpdateWorkspaceRequest;
+import com.sprintforge.repository.ProjectRepository;
 import java.util.List;
 
 @Service
@@ -22,16 +23,18 @@ public class WorkspaceService {
     private final WorkspaceRepository workspaceRepository;
     private final UserService userService;
     private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final ProjectRepository projectRepository;
 
     public WorkspaceService(
-            WorkspaceRepository workspaceRepository,
-            UserService userService,
-            WorkspaceMemberRepository workspaceMemberRepository) {
-        this.workspaceRepository = workspaceRepository;
-        this.userService = userService;
-        this.workspaceMemberRepository = workspaceMemberRepository;
-    }
-
+        WorkspaceRepository workspaceRepository,
+        UserService userService,
+        WorkspaceMemberRepository workspaceMemberRepository,
+        ProjectRepository projectRepository) {
+    this.workspaceRepository = workspaceRepository;
+    this.userService = userService;
+    this.workspaceMemberRepository = workspaceMemberRepository;
+    this.projectRepository = projectRepository;
+}
     // Save the workspace and its OWNER membership in one transaction.
     // If either save fails, both are rolled back.
     @Transactional
@@ -264,5 +267,49 @@ public void removeWorkspaceMember(
     }
 
     workspaceMemberRepository.delete(target);
+}
+// Only the workspace's designated owner can rename it.
+@Transactional
+public Workspace updateWorkspace(
+        Long workspaceId,
+        UpdateWorkspaceRequest request,
+        String requesterEmail) {
+    Workspace workspace = findWorkspaceForOwner(workspaceId, requesterEmail);
+
+    workspace.setName(request.getName());
+    return workspaceRepository.save(workspace);
+}
+
+// Delete only an empty workspace, cleaning up member rows first.
+@Transactional
+public void deleteWorkspace(Long workspaceId, String requesterEmail) {
+    Workspace workspace = findWorkspaceForOwner(workspaceId, requesterEmail);
+
+    if (projectRepository.existsByWorkspaceId(workspaceId)) {
+        throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Delete the workspace's projects before deleting the workspace");
+    }
+
+    // Membership rows reference the workspace, so remove them first.
+    workspaceMemberRepository.deleteByWorkspaceId(workspaceId);
+    workspaceRepository.delete(workspace);
+}
+
+// Load the workspace and verify its designated owner is making the change.
+private Workspace findWorkspaceForOwner(Long workspaceId, String requesterEmail) {
+    Workspace workspace = workspaceRepository.findById(workspaceId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Workspace not found"));
+
+    Long requesterId = userService.getUserIdByEmail(requesterEmail);
+
+    if (!workspace.getOwnerId().equals(requesterId)) {
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Only the workspace owner can manage the workspace");
+    }
+
+    return workspace;
 }
 }

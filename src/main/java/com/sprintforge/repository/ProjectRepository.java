@@ -51,4 +51,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     // Check for a duplicate project key while excluding the project being updated.
 boolean existsByWorkspaceIdAndProjectKeyAndIdNot(
         Long workspaceId, String projectKey, Long id);
+
+        // Used to block workspace deletion while it still contains projects.
+boolean existsByWorkspaceId(Long workspaceId);
 }

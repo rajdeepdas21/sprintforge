@@ -278,4 +278,20 @@ void getIssuesByProjectIdReturns200AndIssuePage() throws Exception {
                         .content(json))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+void unassignIssueFromSprintReturnsIssueWithoutSprint() throws Exception {
+    Issue issue = new Issue();
+    issue.setProjectId(1L);
+    issue.setTitle("Implement login");
+    issue.setSprintId(null);
+
+    when(issueService.unassignIssueFromSprint(eq(1L), any()))
+            .thenReturn(issue);
+
+    mockMvc.perform(delete("/api/issues/1/sprint"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Implement login"))
+            .andExpect(jsonPath("$.sprintId").doesNotExist());
+}
 }

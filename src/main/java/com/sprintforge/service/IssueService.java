@@ -284,4 +284,17 @@ public Issue unassignIssue(
     issue.setAssigneeId(null);
     return issueRepository.save(issue);
 }
+// Remove an issue from its sprint while keeping the issue itself.
+public Issue unassignIssueFromSprint(Long issueId, String email) {
+    // Reuse the existing write permission check; VIEWERs cannot modify issues.
+    Issue issue = getWritableIssue(issueId, email);
+
+    // Make this operation safe to repeat when the issue has no sprint.
+    if (issue.getSprintId() == null) {
+        return issue;
+    }
+
+    issue.setSprintId(null);
+    return issueRepository.save(issue);
+}
 }

@@ -151,4 +151,11 @@ public Issue unassignIssue(
         @AuthenticationPrincipal String email) {
     return issueService.unassignIssue(id, email);
 }
+// Remove an issue from its sprint without deleting the issue.
+@DeleteMapping("/{id}/sprint")
+public Issue unassignIssueFromSprint(
+        @PathVariable Long id,
+        @AuthenticationPrincipal String email) {
+    return issueService.unassignIssueFromSprint(id, email);
+}
 }

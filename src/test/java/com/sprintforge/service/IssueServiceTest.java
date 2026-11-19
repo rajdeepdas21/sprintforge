@@ -568,4 +568,20 @@ void assignIssueToUserRejectsViewer() {
     verify(userService, never()).getUserByEmail(any());
     verify(issueRepository, never()).save(any());
 }
+@Test
+void unassignIssueFromSprintClearsSprintId() {
+    Issue issue = new Issue();
+    issue.setProjectId(1L);
+    issue.setSprintId(3L);
+
+    authorizeProject(1L);
+    when(issueRepository.findById(1L)).thenReturn(Optional.of(issue));
+    when(issueRepository.save(any(Issue.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+    Issue result = issueService.unassignIssueFromSprint(1L, EMAIL);
+
+    assertNull(result.getSprintId());
+    verify(issueRepository).save(issue);
+}
 }

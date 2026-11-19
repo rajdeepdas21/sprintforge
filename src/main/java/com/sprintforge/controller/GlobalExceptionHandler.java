@@ -7,7 +7,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
-
+import org.springframework.security.authentication.BadCredentialsException;
 import java.util.List;
 import java.util.Map;
 
@@ -53,4 +53,14 @@ public class GlobalExceptionHandler {
                         "details", errors
                 ));
     }
+
+    // Use the same response for an unknown email and a wrong password.
+@ExceptionHandler(BadCredentialsException.class)
+public ResponseEntity<Map<String, String>> handleBadCredentials(
+        BadCredentialsException exception) {
+    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "Invalid email or password"));
+}
 }

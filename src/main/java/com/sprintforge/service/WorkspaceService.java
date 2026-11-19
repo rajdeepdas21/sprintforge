@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import com.sprintforge.dto.UpdateWorkspaceRequest;
 import com.sprintforge.repository.ProjectRepository;
+import com.sprintforge.dto.TransferWorkspaceOwnershipRequest;
 import java.util.List;
 
 @Service
@@ -311,5 +312,58 @@ private Workspace findWorkspaceForOwner(Long workspaceId, String requesterEmail)
     }
 
     return workspace;
+}
+
+// Only the current owner can transfer ownership, and the new owner
+// must already belong to this workspace.
+@Transactional
+public Workspace transferWorkspaceOwnership(
+        Long workspaceId,
+        TransferWorkspaceOwnershipRequest request,
+        String requesterEmail) {
+
+    Workspace workspace = workspaceRepository.findById(workspaceId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Workspace not found"));
+
+    Long requesterId = userService.getUserIdByEmail(requesterEmail);
+
+    // Use the workspace's owner_id as the authoritative owner check.
+    if (!workspace.getOwnerId().equals(requesterId)) {
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "Only the current owner can transfer ownership");
+    }
+
+    Long newOwnerId = request.newOwnerId();
+
+    if (requesterId.equals(newOwnerId)) {
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "The new owner must be a different user");
+    }
+
+    WorkspaceMember currentOwner = workspaceMemberRepository
+            .findByWorkspaceIdAndUserId(workspaceId, requesterId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Current owner membership is missing"));
+
+    WorkspaceMember newOwner = workspaceMemberRepository
+            .findByWorkspaceIdAndUserId(workspaceId, newOwnerId)
+            .orElseThrow(() -> new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "The new owner must already be a workspace member"));
+
+    // Demote the current owner first so the single-OWNER index is respected.
+    currentOwner.setRole("ADMIN");
+    workspaceMemberRepository.saveAndFlush(currentOwner);
+
+    // Promote the selected existing member and update the workspace record.
+    newOwner.setRole("OWNER");
+    workspaceMemberRepository.save(newOwner);
+
+    workspace.setOwnerId(newOwnerId);
+    return workspaceRepository.save(workspace);
 }
 }

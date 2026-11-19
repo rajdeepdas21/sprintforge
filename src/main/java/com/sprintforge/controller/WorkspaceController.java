@@ -16,6 +16,7 @@ import java.util.List;
 import com.sprintforge.dto.UpdateWorkspaceMemberRoleRequest;
 import com.sprintforge.entity.WorkspaceMember;
 import com.sprintforge.dto.UpdateWorkspaceRequest;
+import com.sprintforge.dto.TransferWorkspaceOwnershipRequest;
 @RestController
 @RequestMapping("/api/workspaces")
 public class WorkspaceController {
@@ -118,5 +119,14 @@ public void deleteWorkspace(
         @PathVariable Long id,
         Authentication authentication) {
     workspaceService.deleteWorkspace(id, authentication.getName());
+}
+// Transfer ownership to an existing workspace member.
+@PatchMapping("/{workspaceId}/owner")
+public Workspace transferWorkspaceOwnership(
+        @PathVariable Long workspaceId,
+        @Valid @RequestBody TransferWorkspaceOwnershipRequest request,
+        Authentication authentication) {
+    return workspaceService.transferWorkspaceOwnership(
+            workspaceId, request, authentication.getName());
 }
 }
